@@ -306,18 +306,14 @@ class TransformingOperators {
  ### Filtering Operators
  */
 
-class FilteringOperators {
+struct FilteringOperators {
     
     let characters = ["A", "B", "C", "A", "D", "E", "F", "F"]
     
     let numbers = [1, 4, 13, 2, 9, 0]
     
     let optionals = ["A", nil, nil, "D", "E", nil]
-    
-    var subscriptions = Set<AnyCancellable>()
-    
-    init() { }
-    
+            
     //: `filter`: performs identically to the standard library `filter` method.
     
     func filter() {
@@ -326,7 +322,6 @@ class FilteringOperators {
                 value.isMultiple(of: 3)
             }
             .sink(receiveValue: { print($0) })
-            .store(in: &subscriptions)
     }
     
     //: `removeDuplicates`: removes duplicates. Requires no arguments when the values conform to `Equatable`. Otherwise, can use `removeDuplicates(by:)`.
@@ -335,7 +330,6 @@ class FilteringOperators {
         characters.publisher
             .removeDuplicates()
             .sink(receiveValue: { print($0) })
-            .store(in: &subscriptions)
     }
     
     //: `compactMap`: throws away `nil` values.
@@ -344,7 +338,6 @@ class FilteringOperators {
         optionals.publisher
             .compactMap { $0 }
             .sink(receiveValue: { print($0) })
-            .store(in: &subscriptions)
     }
     
     // `first`: takes in as many values as needed until it matches the predicate provided, then, it cancels the subscription and completes.
@@ -353,7 +346,6 @@ class FilteringOperators {
         numbers.publisher
             .first(where: { $0 % 3 == 0 })
             .sink(receiveValue: { print($0) })
-            .store(in: &subscriptions)
     }
     
     // `last`: operates similar to `first`, except it only operates on publishers which are finite. There will be no compiler error thrown, but there will be no result if the publisher does not complete.
@@ -362,7 +354,6 @@ class FilteringOperators {
         numbers.publisher
             .last(where: { $0 % 3 == 0 })
             .sink(receiveValue: { print($0) })
-            .store(in: &subscriptions)
     }
     
     // `dropFirst`: drops the first $n$ values, specified by the `count` parameter.
@@ -371,7 +362,6 @@ class FilteringOperators {
         characters.publisher
             .dropFirst(3)
             .sink(receiveValue: { print($0) })
-            .store(in: &subscriptions)
     }
     
     // `drop(while:)`: drops values while a condition is met, then, values will flow through and not be dropped.
@@ -380,7 +370,6 @@ class FilteringOperators {
         numbers.publisher
             .drop(while: { $0 % 3 != 0 })
             .sink(receiveValue: { print($0) })
-            .store(in: &subscriptions)
     }
     
     // `drop(untilOutputFrom:)`: drops values emitted by a publisher until a second publisher starts emitting values.
@@ -403,5 +392,112 @@ class FilteringOperators {
     }
     
     // `prefix`: similar to `drop`, there is a `prefix`, `prefix(while:)`, and `prefix(untilOutputFrom:)` that accepts values until some condition is met.
-
 }
+
+/*:
+ ### Combining Operators
+ */
+
+struct CombiningOperators {
+    
+    let characters = ["A", "B", "C", "D", "E", "F"]
+    
+    let numbers = [1, 4, 13, 2, 9, 0]
+    
+    let optionals = ["A", nil, nil, "D", "E", nil]
+    
+    //: `prepend`: adds values that emit before any values from the original publisher. `prepend(Output...)` has a variadic argument, whereas `prepend(Sequence)` takes a `Sequence` type. `prepend(Publisher)` takes the values emitted and prepends them to another - the first publisher will only work after the publisher being prepended sends a `.finished` completion.
+    
+    func prepend() {
+        let negatives = [-100, -99, -98].publisher
+        
+        numbers.publisher
+            .prepend(-2, -1, 0) // Output...
+            .prepend([-4, -3]) // Sequence
+            .prepend(negatives)
+            .sink(receiveValue: { print($0) })
+    }
+    
+    //: `append`: appends values, and has similar functions to `prepend` with `append(Output...)`, `append(Sequence)`, and `append(Publisher)`. However, it appends after the original publisher has completed with a `.finished` event.
+    
+    func append() {
+        let positives = [98, 99, 100]
+        
+        numbers.publisher
+            .append([8, 9])
+            .append(10, 11, 12)
+            .append(positives)
+            .sink(receiveValue: { print($0) })
+    }
+    
+    //: `switchToLatest`: for a publisher that emits other publishers, this switches to the latest sent publisher, and cancels previous subscriptions. This could be helpful for use cases like a user initiating a network request. Before it completes, they trigger another one. This would automatically cancel the first and wait on the second.
+    
+    func switchToLatest() {
+        let publisher1 = PassthroughSubject<Int, Never>()
+        let publisher2 = PassthroughSubject<Int, Never>()
+        let publisher3 = PassthroughSubject<Int, Never>()
+        
+        let publishers = PassthroughSubject<PassthroughSubject<Int, Never>, Never>()
+        
+        publishers
+            .switchToLatest()
+            .sink(
+                receiveCompletion: { _ in print("Completed!") },
+                receiveValue: { print($0) }
+            )
+        
+        publishers.send(publisher1)
+        publisher1.send(1)
+        publisher1.send(2)
+
+        publishers.send(publisher2)
+        publisher1.send(3)
+        publisher2.send(4)
+        publisher2.send(5)
+
+        publishers.send(publisher3)
+        publisher2.send(6)
+        publisher3.send(7)
+        publisher3.send(8)
+        publisher3.send(9)
+
+        publisher3.send(completion: .finished)
+        publishers.send(completion: .finished)
+    }
+    
+    //: `merge`: interleaves emissions from different publishers of the same type.
+    
+    func merge() {
+        let publisher1 = PassthroughSubject<Int, Never>()
+        let publisher2 = PassthroughSubject<Int, Never>()
+        
+        publisher1
+            .merge(with: publisher2)
+            .sink(receiveValue: { print($0) })
+    }
+    
+    //: `combineLatest`: combines publishers of different value types, emitting a tuple with the latest values of *all* publishers whenever *any* emit a value. The `combineLatest` will only emit after all publishers have emitted at least one value.
+    
+    func combineLatest() {
+        let stringPublisher = PassthroughSubject<String, Never>()
+        let intPublisher = PassthroughSubject<Int, Never>()
+        
+        stringPublisher
+            .combineLatest(intPublisher)
+            .sink(receiveValue: { print($0) })
+    }
+    
+    //: `zip`: combines publishers of different value types, emitting a tuple, but only emits after all publishers have emited a value at the current index.
+    
+    func zip() {
+        let stringPublisher = PassthroughSubject<String, Never>()
+        let intPublisher = PassthroughSubject<Int, Never>()
+        
+        stringPublisher
+            .zip(intPublisher)
+            .sink(receiveValue: { print($0) })
+    }
+    
+}
+
+// --------------------- //
