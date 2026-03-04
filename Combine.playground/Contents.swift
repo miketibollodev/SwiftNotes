@@ -252,11 +252,11 @@ class TransformingOperators {
             .store(in: &subscriptions)
     }
     
-    //: `map`: works like a standard map for values emitted from a publisher. `tryMap` can be used with a `try` prefix that takes a throwing closure. `flatMap` flattens values from multiple upstream publishers into one.
-    
+    //: `map`: works like a standard map for values emitted from a publisher. `tryMap` can be used with a `try` prefix that takes a throwing closure; if an error is thrown it cancels downstream publishers. `flatMap` flattens values from multiple upstream publishers into a single publisher.
+
     func map() {
         numbers.publisher
-            .map { $0 * 2}
+            .map { $0 * 2 }
             .sink(
                 receiveCompletion: { print($0) },
                 receiveValue: { print($0) }
@@ -300,4 +300,108 @@ class TransformingOperators {
             .sink(receiveValue: { print("Sum: \($0)") })
             .store(in: &subscriptions)
     }
+}
+
+/*:
+ ### Filtering Operators
+ */
+
+class FilteringOperators {
+    
+    let characters = ["A", "B", "C", "A", "D", "E", "F", "F"]
+    
+    let numbers = [1, 4, 13, 2, 9, 0]
+    
+    let optionals = ["A", nil, nil, "D", "E", nil]
+    
+    var subscriptions = Set<AnyCancellable>()
+    
+    init() { }
+    
+    //: `filter`: performs identically to the standard library `filter` method.
+    
+    func filter() {
+        numbers.publisher
+            .filter { value in
+                value.isMultiple(of: 3)
+            }
+            .sink(receiveValue: { print($0) })
+            .store(in: &subscriptions)
+    }
+    
+    //: `removeDuplicates`: removes duplicates. Requires no arguments when the values conform to `Equatable`. Otherwise, can use `removeDuplicates(by:)`.
+    
+    func removeDuplicates() {
+        characters.publisher
+            .removeDuplicates()
+            .sink(receiveValue: { print($0) })
+            .store(in: &subscriptions)
+    }
+    
+    //: `compactMap`: throws away `nil` values.
+    
+    func compactMap() {
+        optionals.publisher
+            .compactMap { $0 }
+            .sink(receiveValue: { print($0) })
+            .store(in: &subscriptions)
+    }
+    
+    // `first`: takes in as many values as needed until it matches the predicate provided, then, it cancels the subscription and completes.
+    
+    func first() {
+        numbers.publisher
+            .first(where: { $0 % 3 == 0 })
+            .sink(receiveValue: { print($0) })
+            .store(in: &subscriptions)
+    }
+    
+    // `last`: operates similar to `first`, except it only operates on publishers which are finite. There will be no compiler error thrown, but there will be no result if the publisher does not complete.
+    
+    func last() {
+        numbers.publisher
+            .last(where: { $0 % 3 == 0 })
+            .sink(receiveValue: { print($0) })
+            .store(in: &subscriptions)
+    }
+    
+    // `dropFirst`: drops the first $n$ values, specified by the `count` parameter.
+    
+    func dropFirst() {
+        characters.publisher
+            .dropFirst(3)
+            .sink(receiveValue: { print($0) })
+            .store(in: &subscriptions)
+    }
+    
+    // `drop(while:)`: drops values while a condition is met, then, values will flow through and not be dropped.
+    
+    func dropWhile() {
+        numbers.publisher
+            .drop(while: { $0 % 3 != 0 })
+            .sink(receiveValue: { print($0) })
+            .store(in: &subscriptions)
+    }
+    
+    // `drop(untilOutputFrom:)`: drops values emitted by a publisher until a second publisher starts emitting values.
+    
+    func dropUntilOutputFrom() {
+        let isReady = PassthroughSubject<Void, Never>()
+        let taps = PassthroughSubject<Int, Never>()
+        
+        taps
+            .drop(untilOutputFrom: isReady)
+            .sink(receiveValue: { print($0) })
+        
+        (1...5).forEach { n in
+            taps.send(n)
+            
+            if n == 3 {
+                isReady.send()
+            }
+        }
+    }
+    
+    // `prefix`: similar to `drop`, there is a `prefix`, `prefix(while:)`, and `prefix(untilOutputFrom:)` that accepts values until some condition is met.
+
 }
